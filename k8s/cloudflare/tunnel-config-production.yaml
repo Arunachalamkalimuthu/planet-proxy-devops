@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: production
+data:
+  config.yaml: |
+    tunnel: <YOUR_TUNNEL_ID>
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+
+    ingress:
+      # ===========================================
+      # MONITORING & ADMIN (Protected by Cloudflare Access)
+      # ===========================================
+
+      # Grafana Dashboard
+      - hostname: grafana.planet-proxy.com
+        service: http://grafana.monitoring.svc.cluster.local:3000
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+
+      # Prometheus Metrics
+      - hostname: prometheus.planet-proxy.com
+        service: http://prometheus.monitoring.svc.cluster.local:9090
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+
+      # Kibana Logs
+      - hostname: kibana.planet-proxy.com
+        service: http://kibana.logging.svc.cluster.local:5601
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+
+      # HAProxy Stats
+      - hostname: haproxy-stats.planet-proxy.com
+        service: http://haproxy.haproxy.svc.cluster.local:8404
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+
+      # Kubernetes Dashboard (Config Editor)
+      - hostname: k8s-dashboard.planet-proxy.com
+        service: https://kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local:443
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+
+      # ===========================================
+      # PRODUCTION APPLICATION
+      # ===========================================
+
+      # Production API endpoint (HAProxy handles /gateway/* rewrite)
+      - hostname: api.planet-proxy.com
+        service: http://haproxy.haproxy.svc.cluster.local:80
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: api.planet-proxy.com
+
+      # Production web app
+      - hostname: planet-proxy.com
+        service: http://haproxy.haproxy.svc.cluster.local:80
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+
+      # WWW redirect
+      - hostname: www.planet-proxy.com
+        service: http://haproxy.haproxy.svc.cluster.local:80
+        originRequest:
+          noTLSVerify: true
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+
+      # Catch-all rule (required)
+      - service: http_status:404

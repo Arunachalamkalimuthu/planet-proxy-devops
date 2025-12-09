@@ -1,0 +1,92 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: haproxy
+  namespace: haproxy
+  labels:
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/component: load-balancer
+    environment: production
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: haproxy
+  namespaceSelector:
+    matchNames:
+      - haproxy
+  endpoints:
+    - port: stats
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-alerting-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: haproxy
+    prometheus: alerts
+data:
+  haproxy-alerts.yaml: |
+    groups:
+      - name: haproxy
+        rules:
+          - alert: HAProxyDown
+            expr: up{job="haproxy"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "HAProxy instance is down"
+              description: "HAProxy instance {{ $labels.instance }} has been down for more than 1 minute."
+
+          - alert: HAProxyHighBackendErrorRate
+            expr: |
+              rate(haproxy_backend_http_responses_total{code="5xx"}[5m]) /
+              rate(haproxy_backend_http_responses_total[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "HAProxy backend high 5xx error rate"
+              description: "Backend {{ $labels.proxy }} has more than 5% 5xx error rate."
+
+          - alert: HAProxyBackendDown
+            expr: haproxy_backend_up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "HAProxy backend is down"
+              description: "HAProxy backend {{ $labels.proxy }} has no healthy servers."
+
+          - alert: HAProxyHighConnectionRate
+            expr: rate(haproxy_frontend_connections_total[5m]) > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "HAProxy high connection rate"
+              description: "Frontend {{ $labels.proxy }} is receiving more than 1000 connections/sec."
+
+          - alert: HAProxyServerResponseTimeHigh
+            expr: haproxy_backend_response_time_average_seconds > 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "HAProxy backend response time high"
+              description: "Backend {{ $labels.proxy }} average response time is above 1 second."
+
+          - alert: HAProxyHighSessionUsage
+            expr: |
+              (haproxy_frontend_current_sessions / haproxy_frontend_limit_sessions) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "HAProxy high session usage"
+              description: "Frontend {{ $labels.proxy }} is using more than 80% of session limit."

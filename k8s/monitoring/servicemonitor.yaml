@@ -1,0 +1,45 @@
+# ServiceMonitor for Planet Proxy app
+# Requires prometheus-operator to be installed
+# If using basic Prometheus, the scrape config in prometheus-config.yaml handles this
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: planet-proxy-monitor
+  namespace: monitoring
+  labels:
+    app: planet-proxy
+spec:
+  namespaceSelector:
+    matchNames:
+      - beta
+      - production
+  selector:
+    matchLabels:
+      app: planet-proxy
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+# PodMonitor as alternative
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: planet-proxy-pods
+  namespace: monitoring
+  labels:
+    app: planet-proxy
+spec:
+  namespaceSelector:
+    matchNames:
+      - beta
+      - production
+  selector:
+    matchLabels:
+      app: planet-proxy
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

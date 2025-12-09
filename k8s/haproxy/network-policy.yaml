@@ -1,0 +1,66 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: haproxy-network-policy
+  namespace: haproxy
+  labels:
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/component: load-balancer
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: haproxy
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from Cloudflare tunnel
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: cloudflare
+      ports:
+        - protocol: TCP
+          port: 80
+    # Allow traffic from ingress-nginx namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+    # Allow stats/metrics access from monitoring namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8404
+    # Allow health checks from any namespace
+    - ports:
+        - protocol: TCP
+          port: 8405
+  egress:
+    # Allow traffic to production namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              environment: production
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 3000
+    # Allow DNS resolution (CoreDNS)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

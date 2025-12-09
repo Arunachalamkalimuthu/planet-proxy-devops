@@ -1,0 +1,41 @@
+# Kubernetes Dashboard - Official Self-Hosted Dashboard
+# https://github.com/kubernetes/dashboard
+#
+# This installs the official Kubernetes Dashboard which allows you to:
+# - View and edit ConfigMaps (including HAProxy config)
+# - View and manage Deployments, Pods, Services
+# - View logs and events
+# - Execute commands in containers
+#
+# Installation:
+#   helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+#   helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
+#     --create-namespace --namespace kubernetes-dashboard \
+#     -f k8s/config-dashboard/kubernetes-dashboard.yaml
+#
+# Access:
+#   kubectl port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 -n kubernetes-dashboard
+#   Open: https://localhost:8443
+#
+# Create admin user token:
+#   kubectl apply -f k8s/config-dashboard/dashboard-admin.yaml
+#   kubectl -n kubernetes-dashboard create token admin-user
+
+# Helm values for Kubernetes Dashboard
+app:
+  ingress:
+    enabled: false  # We'll use Cloudflare Tunnel instead
+
+kong:
+  proxy:
+    http:
+      enabled: false
+
+# Resource limits
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

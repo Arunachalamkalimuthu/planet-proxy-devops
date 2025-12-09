@@ -1,0 +1,67 @@
+@startuml API Request Flow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title API Request Flow - Planet Proxy
+
+actor Client as client
+participant "Cloudflare\nEdge" as cloudflare #LightBlue
+participant "cloudflared\n(tunnel)" as tunnel #LightGreen
+participant "HAProxy\n(load balancer)" as haproxy #LightYellow
+participant "Node.js\nApplication" as app #LightCoral
+
+== API Request ==
+
+client -> cloudflare : HTTPS Request\napi.domain.com/gateway/data
+activate cloudflare
+
+note right of cloudflare
+    1. SSL/TLS Termination
+    2. DDoS Protection
+    3. WAF Rules Check
+end note
+
+cloudflare -> tunnel : Tunnel Request\n(encrypted)
+activate tunnel
+
+note right of tunnel
+    Route by hostname:
+    api.* → HAProxy
+end note
+
+tunnel -> haproxy : HTTP Request
+activate haproxy
+
+note right of haproxy
+    1. Rate Limit Check
+       (500 req/10s per IP)
+    2. Connection Limit Check
+       (200 max per IP)
+    3. URL Rewrite:
+       /gateway/* → /api/peer/1/*
+end note
+
+haproxy -> app : Load Balanced Request\n/api/peer/1/data
+activate app
+
+app --> haproxy : JSON Response
+deactivate app
+
+note right of haproxy
+    Add Security Headers:
+    - X-Frame-Options
+    - X-Content-Type-Options
+    - X-XSS-Protection
+end note
+
+haproxy --> tunnel : HTTP Response\n+ Security Headers
+deactivate haproxy
+
+tunnel --> cloudflare : Tunnel Response
+deactivate tunnel
+
+cloudflare --> client : HTTPS Response
+deactivate cloudflare
+
+@enduml

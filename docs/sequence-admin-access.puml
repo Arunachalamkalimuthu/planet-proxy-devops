@@ -1,0 +1,51 @@
+@startuml Admin Dashboard Access Flow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title Admin Dashboard Access Flow - Planet Proxy
+
+actor Admin as admin
+participant "Cloudflare\nEdge" as cloudflare #LightBlue
+participant "Cloudflare\nAccess" as access #LightCyan
+participant "cloudflared\n(tunnel)" as tunnel #LightGreen
+participant "Dashboard\n(Grafana/K8s)" as dashboard #LightCoral
+
+== Admin Dashboard Access ==
+
+admin -> cloudflare : HTTPS Request\ngrafana.domain.com
+activate cloudflare
+
+cloudflare -> access : Check Access Policy
+activate access
+
+alt Not Authenticated
+    access --> admin : Redirect to Login Page
+    admin -> access : Email/SSO Authentication
+    access -> access : Verify Identity
+end
+
+access --> cloudflare : Authenticated ✓
+deactivate access
+
+note right of cloudflare
+    User authenticated via
+    Cloudflare Zero Trust
+end note
+
+cloudflare -> tunnel : Tunnel Request
+activate tunnel
+
+tunnel -> dashboard : Forward to Service
+activate dashboard
+
+dashboard --> tunnel : Dashboard HTML/API
+deactivate dashboard
+
+tunnel --> cloudflare : Response
+deactivate tunnel
+
+cloudflare --> admin : Dashboard Content
+deactivate cloudflare
+
+@enduml

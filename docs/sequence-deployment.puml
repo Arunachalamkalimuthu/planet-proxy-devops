@@ -1,0 +1,67 @@
+@startuml Deployment Flow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title CI/CD Deployment Flow - Planet Proxy
+
+actor Developer as dev
+participant "GitHub\nRepository" as github #LightGray
+participant "GitHub\nActions" as actions #LightBlue
+participant "GHCR\n(Container Registry)" as ghcr #LightGreen
+participant "Server\n(SSH)" as server #LightYellow
+participant "Kubernetes\nCluster" as k8s #LightCoral
+
+== Deployment Pipeline ==
+
+dev -> github : git push main
+activate github
+
+github -> actions : Trigger Workflow
+activate actions
+
+== Build Stage ==
+
+actions -> actions : Checkout Code
+actions -> actions : Run Tests
+actions -> actions : Build Docker Image
+
+actions -> ghcr : Push Image\nghcr.io/org/app:sha
+activate ghcr
+ghcr --> actions : Image Pushed ✓
+deactivate ghcr
+
+== Deploy Stage ==
+
+actions -> server : SSH Connect
+activate server
+
+server -> server : Pull DevOps Repo
+
+server -> k8s : kubectl apply -k overlays/production
+activate k8s
+
+k8s -> ghcr : Pull Image
+ghcr --> k8s : Image Downloaded
+
+k8s -> k8s : Rolling Update
+note right of k8s
+    1. Create new pods
+    2. Health check
+    3. Route traffic
+    4. Terminate old pods
+end note
+
+k8s --> server : Deployment Complete ✓
+deactivate k8s
+
+server --> actions : Deploy Success
+deactivate server
+
+actions --> github : Workflow Complete
+deactivate actions
+
+github --> dev : Success Notification
+deactivate github
+
+@enduml

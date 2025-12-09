@@ -1,0 +1,120 @@
+@startuml Planet Proxy Architecture
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+title Planet Proxy - System Architecture
+
+' External
+cloud "Internet" as internet {
+    actor "Client" as client
+    actor "Admin" as admin
+}
+
+' Cloudflare Edge
+package "Cloudflare Edge" as cloudflare #LightBlue {
+    component "SSL/TLS\nTermination" as ssl
+    component "DDoS\nProtection" as ddos
+    component "WAF\nRules" as waf
+    component "Cloudflare\nAccess" as access
+    component "Cloudflare\nTunnel" as tunnel
+}
+
+' Kubernetes Cluster
+package "Kubernetes Cluster (K3s)" as k8s #LightGreen {
+
+    ' Production Namespace
+    package "production namespace" as prod_ns #White {
+        component "cloudflared\n(tunnel agent)" as cloudflared
+
+        package "Node.js Application" as app {
+            component "Pod 1" as pod1
+            component "Pod 2" as pod2
+            component "Pod 3" as pod3
+        }
+
+        component "HPA\n(3-10 replicas)" as app_hpa
+    }
+
+    ' HAProxy Namespace
+    package "haproxy namespace" as haproxy_ns #LightYellow {
+        package "HAProxy Load Balancer" as haproxy {
+            component "HAProxy Pod 1" as hp1
+            component "HAProxy Pod 2" as hp2
+            component "HAProxy Pod 3" as hp3
+        }
+
+        component "HPA\n(3-20 replicas)" as haproxy_hpa
+
+        note right of haproxy
+            Features:
+            - Rate Limiting (500 req/10s)
+            - URL Rewriting
+            - Health Checks
+            - Circuit Breaker
+            - Security Headers
+        end note
+    }
+
+    ' Monitoring Namespace
+    package "monitoring namespace" as mon_ns #LightCoral {
+        component "Prometheus\n(metrics)" as prometheus
+        component "Grafana\n(dashboards)" as grafana
+        component "Alertmanager\n(alerts)" as alertmanager
+        component "ServiceMonitor" as servicemonitor
+    }
+
+    ' Logging Namespace
+    package "logging namespace" as log_ns #LightGray {
+        component "Elasticsearch\n(storage)" as elasticsearch
+        component "Fluentd\n(collector)" as fluentd
+        component "Kibana\n(UI)" as kibana
+    }
+
+    ' Dashboard Namespace
+    package "kubernetes-dashboard namespace" as dash_ns #Lavender {
+        component "Kubernetes\nDashboard" as k8s_dash
+    }
+}
+
+' Connections - External to Cloudflare
+client --> ssl : HTTPS
+admin --> ssl : HTTPS
+
+' Cloudflare internal
+ssl --> ddos
+ddos --> waf
+waf --> access : Admin URLs
+waf --> tunnel : API URLs
+access --> tunnel : Authenticated
+
+' Tunnel to Cluster
+tunnel --> cloudflared : Encrypted\nTunnel
+
+' Cloudflared routing
+cloudflared --> haproxy : api.*
+cloudflared --> grafana : grafana.*
+cloudflared --> prometheus : prometheus.*
+cloudflared --> kibana : kibana.*
+cloudflared --> k8s_dash : k8s-dashboard.*
+
+' HAProxy to App
+haproxy --> app : Load Balanced
+
+' Monitoring connections
+servicemonitor ..> haproxy : scrape metrics
+servicemonitor ..> app : scrape metrics
+prometheus --> grafana : data source
+prometheus --> alertmanager : alerts
+
+' Logging connections
+fluentd ..> app : collect logs
+fluentd --> elasticsearch : store
+elasticsearch --> kibana : query
+
+' HPA connections
+app_hpa ..> app : scale
+haproxy_hpa ..> haproxy : scale
+
+@enduml

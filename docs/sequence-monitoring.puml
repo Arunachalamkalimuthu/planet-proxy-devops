@@ -1,0 +1,59 @@
+@startuml Monitoring & Logging Flow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title Monitoring & Logging Flow - Planet Proxy
+
+participant "Node.js\nApplication" as app #LightCoral
+participant "HAProxy" as haproxy #LightYellow
+participant "Fluentd\n(DaemonSet)" as fluentd #LightGray
+participant "Prometheus" as prometheus #LightGreen
+participant "Elasticsearch" as elasticsearch #LightBlue
+participant "Grafana" as grafana #Orange
+participant "Kibana" as kibana #Cyan
+participant "Alertmanager" as alertmanager #Red
+
+== Metrics Collection ==
+
+loop Every 15 seconds
+    prometheus -> app : Scrape /metrics
+    app --> prometheus : Metrics Data
+
+    prometheus -> haproxy : Scrape :8404/metrics
+    haproxy --> prometheus : HAProxy Metrics
+end
+
+== Log Collection ==
+
+app -> fluentd : stdout/stderr logs
+haproxy -> fluentd : Access logs
+
+fluentd -> elasticsearch : Index Logs\n(kubernetes-*)
+
+== Visualization ==
+
+grafana -> prometheus : Query Metrics\n(PromQL)
+prometheus --> grafana : Time Series Data
+
+kibana -> elasticsearch : Query Logs
+elasticsearch --> kibana : Log Results
+
+== Alerting ==
+
+prometheus -> prometheus : Evaluate Alert Rules
+
+alt Alert Triggered
+    prometheus -> alertmanager : Send Alert
+    alertmanager -> alertmanager : Group & Deduplicate
+    alertmanager --> prometheus : Alert Acknowledged
+
+    note right of alertmanager
+        Notifications:
+        - Email
+        - Slack
+        - PagerDuty
+    end note
+end
+
+@enduml

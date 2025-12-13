@@ -130,6 +130,66 @@ create_registry_secret_interactive() {
     fi
 }
 
+# Create application secrets
+create_app_secrets() {
+    print_header "Application Secrets Setup"
+
+    # Check if secrets already exist
+    if kubectl get secret planet-proxy-secrets -n "$NAMESPACE" &>/dev/null; then
+        print_warning "planet-proxy-secrets already exists, skipping"
+        return
+    fi
+
+    echo "Create application secrets now? (y/n)"
+    read CREATE_APP_SECRETS
+
+    if [ "$CREATE_APP_SECRETS" = "y" ]; then
+        echo "MongoDB URI (leave empty for default):"
+        read MONGODB_URI
+        MONGODB_URI=${MONGODB_URI:-"mongodb://localhost:27017/planet-proxy"}
+
+        echo "JWT Secret (leave empty to generate):"
+        read -s JWT_SECRET
+        if [ -z "$JWT_SECRET" ]; then
+            JWT_SECRET=$(openssl rand -base64 32)
+            echo "(generated)"
+        else
+            echo "(set)"
+        fi
+
+        kubectl create secret generic planet-proxy-secrets \
+            --from-literal=MONGODB_URI="$MONGODB_URI" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=NODE_ENV="production" \
+            --namespace="$NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+        print_success "Application secrets created"
+    else
+        # Create empty/placeholder secrets so deployment doesn't fail
+        kubectl create secret generic planet-proxy-secrets \
+            --from-literal=PLACEHOLDER="true" \
+            --namespace="$NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+        print_warning "Created placeholder secrets - update later with real values"
+    fi
+}
+
+# Create application secrets from environment
+create_app_secrets_from_env() {
+    print_header "Application Secrets Setup"
+
+    # Create placeholder secrets if not exists
+    kubectl create secret generic planet-proxy-secrets \
+        --from-literal=MONGODB_URI="${MONGODB_URI:-mongodb://localhost:27017/planet-proxy}" \
+        --from-literal=JWT_SECRET="${JWT_SECRET:-$(openssl rand -base64 32)}" \
+        --from-literal=NODE_ENV="production" \
+        --namespace="$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    print_success "Application secrets created"
+}
+
 # Create Docker registry secret from environment variables
 create_registry_secret_from_env() {
     print_header "Docker Registry Setup"
@@ -390,8 +450,10 @@ main() {
 
     if [ "$MODE" = "--from-env" ]; then
         create_registry_secret_from_env
+        create_app_secrets_from_env
     else
         create_registry_secret_interactive
+        create_app_secrets
     fi
 
     deploy_haproxy

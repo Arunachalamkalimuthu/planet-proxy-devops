@@ -15,19 +15,23 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow traffic from Cloudflare tunnel
+    # Allow traffic from Cloudflare tunnel (in production namespace)
     - from:
         - namespaceSelector:
             matchLabels:
-              name: cloudflare
+              kubernetes.io/metadata.name: production
       ports:
         - protocol: TCP
           port: 80
+        - protocol: TCP
+          port: 8404
+        - protocol: TCP
+          port: 8405
     # Allow traffic from ingress-nginx namespace
     - from:
         - namespaceSelector:
             matchLabels:
-              name: ingress-nginx
+              kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
           port: 80
@@ -35,7 +39,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              name: monitoring
+              kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
           port: 8404

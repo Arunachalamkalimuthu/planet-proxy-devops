@@ -154,6 +154,9 @@ create_registry_secret_from_env() {
 deploy_haproxy() {
     print_header "Deploying HAProxy"
 
+    # Delete existing deployment to avoid immutable selector errors
+    kubectl delete deployment haproxy -n haproxy --ignore-not-found 2>/dev/null || true
+
     kubectl apply -k k8s/haproxy/
 
     print_step "Waiting for HAProxy pods..."

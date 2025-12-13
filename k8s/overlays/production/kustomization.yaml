@@ -5,12 +5,12 @@ namespace: production
 
 resources:
   - ../../base
-  - ../../base/namespace-production.yaml
 
 namePrefix: prod-
 
-commonLabels:
-  environment: production
+labels:
+  - pairs:
+      environment: production
 
 replicas:
   - name: planet-proxy-app

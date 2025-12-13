@@ -11,11 +11,12 @@ resources:
   - service.yaml
   - hpa.yaml
   - network-policy.yaml
-  - servicemonitor.yaml
+  # - servicemonitor.yaml  # Requires Prometheus Operator CRDs
 
-commonLabels:
-  app.kubernetes.io/name: haproxy
-  app.kubernetes.io/component: load-balancer
-  app.kubernetes.io/part-of: planet-proxy
-  app.kubernetes.io/managed-by: kustomize
-  environment: production
+labels:
+  - pairs:
+      app.kubernetes.io/name: haproxy
+      app.kubernetes.io/component: load-balancer
+      app.kubernetes.io/part-of: planet-proxy
+      app.kubernetes.io/managed-by: kustomize
+      environment: production

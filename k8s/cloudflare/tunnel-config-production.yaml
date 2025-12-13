@@ -38,7 +38,7 @@ data:
 
       # HAProxy Stats
       - hostname: haproxy-stats.planet-proxy.com
-        service: http://haproxy.haproxy.svc.cluster.local:8404
+        service: http://haproxy.haproxy.svc.cluster.local:8404/stats
         originRequest:
           noTLSVerify: true
           connectTimeout: 30s

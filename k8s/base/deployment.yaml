@@ -17,6 +17,8 @@ spec:
         app: planet-proxy
         component: api
     spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
       containers:
         - name: planet-proxy
           image: ghcr.io/arunachalamkalimuthu/planet-proxy:latest

@@ -324,8 +324,18 @@ planet-proxy-devops/
 
 ## Prerequisites
 
-- Ubuntu Server 20.04+ (or any Linux with systemd)
-- Minimum 2 CPU, 4GB RAM (recommended: 4 CPU, 8GB RAM)
+### Server Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| **OS** | Ubuntu 22.04 LTS | Ubuntu 22.04 LTS |
+| **CPU** | 2 cores | 4 cores |
+| **RAM** | 4 GB | 8 GB |
+| **Storage** | 40 GB SSD | 80 GB SSD |
+
+> **Recommended OS:** Ubuntu 22.04 LTS (supported until April 2027)
+
+### Other Requirements
 - Root or sudo access
 - Domain configured in Cloudflare
 - GitHub account with Container Registry access
@@ -390,18 +400,12 @@ chmod +x scripts/*.sh
 ./scripts/install.sh
 ```
 This will prompt you for:
-- DATABASE_URL
-- JWT_SECRET
-- API_KEY
-- GitHub credentials (for pulling images)
+- GitHub credentials (for pulling images from GHCR)
 - Cloudflare Tunnel setup
 
 **Option B: Automated Mode (CI/CD or scripted setup)**
 ```bash
 # Set environment variables
-export DATABASE_URL="postgresql://user:pass@host:5432/db"
-export JWT_SECRET="your-jwt-secret-min-32-chars"
-export API_KEY="your-api-key"
 export GITHUB_USERNAME="your-github-username"
 export GITHUB_PAT="ghp_your-personal-access-token"
 
@@ -411,9 +415,6 @@ export GITHUB_PAT="ghp_your-personal-access-token"
 
 **Option C: Minimal Installation (skip monitoring)**
 ```bash
-export DATABASE_URL="postgresql://user:pass@host:5432/db"
-export JWT_SECRET="your-jwt-secret"
-export API_KEY="your-api-key"
 export SKIP_MONITORING=true
 export SKIP_DASHBOARD=true
 

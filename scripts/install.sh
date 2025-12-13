@@ -3,19 +3,13 @@
 #
 # Usage:
 #   Interactive mode:  ./install.sh
-#   From env vars:     ./install.sh --from-env
+#   Automated mode:    ./install.sh --from-env
 #
 # Environment variables (for --from-env mode):
-#   DATABASE_URL      - Database connection string
-#   JWT_SECRET        - JWT signing secret
-#   API_KEY           - API key
 #   GITHUB_USERNAME   - GitHub username (for GHCR)
 #   GITHUB_PAT        - GitHub Personal Access Token (for GHCR)
 #   GITHUB_EMAIL      - GitHub email (optional)
 #   TUNNEL_ID         - Cloudflare Tunnel ID
-#   SKIP_SECRETS      - Set to "true" to skip secrets creation
-#   SKIP_MONITORING   - Set to "true" to skip monitoring stack
-#   SKIP_DASHBOARD    - Set to "true" to skip K8s dashboard
 
 set -e
 
@@ -104,37 +98,10 @@ create_namespaces() {
     print_success "logging namespace"
 }
 
-# Create secrets interactively
-create_secrets_interactive() {
-    print_header "Creating Secrets"
+# Create Docker registry secret interactively
+create_registry_secret_interactive() {
+    print_header "Docker Registry Setup"
 
-    echo "Enter application secrets (input will be hidden):"
-    echo ""
-
-    echo "DATABASE_URL:"
-    read -s DATABASE_URL
-    echo "(set)"
-
-    echo "JWT_SECRET:"
-    read -s JWT_SECRET
-    echo "(set)"
-
-    echo "API_KEY:"
-    read -s API_KEY
-    echo "(set)"
-
-    # Create application secrets
-    kubectl create secret generic planet-proxy-secrets \
-        --from-literal=DATABASE_URL="$DATABASE_URL" \
-        --from-literal=JWT_SECRET="$JWT_SECRET" \
-        --from-literal=API_KEY="$API_KEY" \
-        --namespace="$NAMESPACE" \
-        --dry-run=client -o yaml | kubectl apply -f -
-
-    print_success "Application secrets created"
-
-    # Docker registry secret
-    echo ""
     echo "Create Docker registry credentials for GHCR? (y/n)"
     read CREATE_DOCKER_SECRET
 
@@ -158,41 +125,14 @@ create_secrets_interactive() {
             --dry-run=client -o yaml | kubectl apply -f -
 
         print_success "Docker registry secret created"
+    else
+        print_warning "Skipping Docker registry secret"
     fi
 }
 
-# Create secrets from environment variables
-create_secrets_from_env() {
-    print_header "Creating Secrets from Environment"
-
-    if [ "$SKIP_SECRETS" = "true" ]; then
-        print_warning "Skipping secrets creation (SKIP_SECRETS=true)"
-        return
-    fi
-
-    # Validate required env vars
-    if [ -z "$DATABASE_URL" ]; then
-        print_error "DATABASE_URL environment variable is not set"
-        exit 1
-    fi
-    if [ -z "$JWT_SECRET" ]; then
-        print_error "JWT_SECRET environment variable is not set"
-        exit 1
-    fi
-    if [ -z "$API_KEY" ]; then
-        print_error "API_KEY environment variable is not set"
-        exit 1
-    fi
-
-    # Create application secrets
-    kubectl create secret generic planet-proxy-secrets \
-        --from-literal=DATABASE_URL="$DATABASE_URL" \
-        --from-literal=JWT_SECRET="$JWT_SECRET" \
-        --from-literal=API_KEY="$API_KEY" \
-        --namespace="$NAMESPACE" \
-        --dry-run=client -o yaml | kubectl apply -f -
-
-    print_success "Application secrets created"
+# Create Docker registry secret from environment variables
+create_registry_secret_from_env() {
+    print_header "Docker Registry Setup"
 
     # Create Docker registry secret if env vars are set
     if [ -n "$GITHUB_USERNAME" ] && [ -n "$GITHUB_PAT" ]; then
@@ -205,6 +145,8 @@ create_secrets_from_env() {
             --dry-run=client -o yaml | kubectl apply -f -
 
         print_success "Docker registry secret created"
+    else
+        print_warning "GITHUB_USERNAME/GITHUB_PAT not set, skipping Docker registry secret"
     fi
 }
 
@@ -236,11 +178,6 @@ deploy_application() {
 deploy_monitoring() {
     print_header "Deploying Monitoring Stack"
 
-    if [ "$SKIP_MONITORING" = "true" ]; then
-        print_warning "Skipping monitoring (SKIP_MONITORING=true)"
-        return
-    fi
-
     # Prometheus
     print_step "Deploying Prometheus..."
     kubectl apply -f k8s/monitoring/prometheus-config.yaml
@@ -266,11 +203,6 @@ deploy_monitoring() {
 deploy_dashboard() {
     print_header "Deploying Kubernetes Dashboard"
 
-    if [ "$SKIP_DASHBOARD" = "true" ]; then
-        print_warning "Skipping dashboard (SKIP_DASHBOARD=true)"
-        return
-    fi
-
     if [ "$HELM_AVAILABLE" = "false" ]; then
         print_warning "Skipping dashboard (Helm not installed)"
         return
@@ -292,7 +224,48 @@ deploy_dashboard() {
     print_success "Kubernetes Dashboard deployed"
 }
 
-# Setup Cloudflare Tunnel
+# Setup Cloudflare Tunnel from environment variables
+setup_cloudflare_from_env() {
+    print_header "Cloudflare Tunnel Setup"
+
+    if [ -z "$TUNNEL_ID" ]; then
+        print_warning "TUNNEL_ID not set, skipping Cloudflare Tunnel"
+        return
+    fi
+
+    # Check if credentials file exists
+    CREDS_FILE="$HOME/.cloudflared/${TUNNEL_ID}.json"
+    if [ ! -f "$CREDS_FILE" ]; then
+        print_error "Credentials file not found: $CREDS_FILE"
+        echo "Run: cloudflared tunnel login && cloudflared tunnel create <tunnel-name>"
+        print_warning "Skipping Cloudflare Tunnel deployment"
+        return
+    fi
+
+    print_step "Creating Cloudflare credentials secret..."
+    kubectl create secret generic cloudflared-credentials \
+        --from-file=credentials.json="$CREDS_FILE" \
+        -n production \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    print_success "Cloudflare credentials secret created"
+
+    # Update tunnel config with TUNNEL_ID
+    print_step "Configuring tunnel with ID: $TUNNEL_ID"
+    sed -i.bak "s/<YOUR_TUNNEL_ID>/$TUNNEL_ID/g" k8s/cloudflare/tunnel-config-production.yaml
+
+    # Deploy tunnel
+    print_step "Deploying Cloudflare Tunnel..."
+    kubectl apply -f k8s/cloudflare/tunnel-config-production.yaml
+    kubectl apply -f k8s/cloudflare/tunnel-deployment.yaml
+
+    print_step "Waiting for cloudflared pods..."
+    kubectl wait --for=condition=ready pod -l app=cloudflared -n production --timeout=120s || true
+
+    print_success "Cloudflare Tunnel deployed"
+}
+
+# Setup Cloudflare Tunnel interactively
 setup_cloudflare_interactive() {
     print_header "Cloudflare Tunnel Setup"
 
@@ -346,6 +319,9 @@ setup_cloudflare_interactive() {
     kubectl apply -f k8s/cloudflare/tunnel-config-production.yaml
     kubectl apply -f k8s/cloudflare/tunnel-deployment.yaml
 
+    print_step "Waiting for cloudflared pods..."
+    kubectl wait --for=condition=ready pod -l app=cloudflared -n production --timeout=120s || true
+
     print_success "Cloudflare Tunnel deployed"
 }
 
@@ -356,12 +332,13 @@ print_summary() {
     echo "Deployed components:"
     echo "  • HAProxy load balancer"
     echo "  • Planet Proxy application"
-    if [ "$SKIP_MONITORING" != "true" ]; then
-        echo "  • Prometheus & Grafana"
-        echo "  • ELK Stack (Elasticsearch, Fluentd, Kibana)"
-    fi
-    if [ "$SKIP_DASHBOARD" != "true" ] && [ "$HELM_AVAILABLE" = "true" ]; then
+    echo "  • Prometheus & Grafana"
+    echo "  • ELK Stack (Elasticsearch, Fluentd, Kibana)"
+    if [ "$HELM_AVAILABLE" = "true" ]; then
         echo "  • Kubernetes Dashboard"
+    fi
+    if [ -n "$TUNNEL_ID" ]; then
+        echo "  • Cloudflare Tunnel"
     fi
 
     echo ""
@@ -371,7 +348,7 @@ print_summary() {
     echo "  kubectl get pods -n monitoring"
     echo "  kubectl get pods -n logging"
 
-    if [ "$SKIP_DASHBOARD" != "true" ] && [ "$HELM_AVAILABLE" = "true" ]; then
+    if [ "$HELM_AVAILABLE" = "true" ]; then
         echo ""
         echo "Get K8s Dashboard token:"
         echo "  kubectl -n kubernetes-dashboard create token admin-user"
@@ -409,9 +386,9 @@ main() {
     create_namespaces
 
     if [ "$MODE" = "--from-env" ]; then
-        create_secrets_from_env
+        create_registry_secret_from_env
     else
-        create_secrets_interactive
+        create_registry_secret_interactive
     fi
 
     deploy_haproxy
@@ -419,7 +396,9 @@ main() {
     deploy_monitoring
     deploy_dashboard
 
-    if [ "$MODE" = "interactive" ]; then
+    if [ "$MODE" = "--from-env" ]; then
+        setup_cloudflare_from_env
+    else
         setup_cloudflare_interactive
     fi
 
